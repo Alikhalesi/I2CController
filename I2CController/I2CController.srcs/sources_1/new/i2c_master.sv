@@ -20,62 +20,219 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module i2c_master(
+module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000_00/(SCL_FREQ*4)),localparam logic[7:0] DEVICE_ADDR_WR=7'b10010000
+,localparam logic[7:0] DEVICE_ADDR_R=7'b10010001)
+(
     input logic clk,
     input logic nrst,
-    input common::I2C_COMMAND command
+    inout tri sda,
+    inout tri scl,
+    input logic[7:0] din,
+    output logic[7:0] dout,
+    input common::I2C_COMMAND command,
+    output logic ready,
+    output logic finished
     );
     
-    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,STOP=4'd6} state;
+    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7} state;
+    typedef enum logic {ADDR=1'd0,DATA=1'd1} phase;
     
     state r_state,next_state;
+    common::I2C_COMMAND r_command,next_command;
+    logic r_ready,next_ready;
+    logic r_sda,r_scl,next_sda,next_scl;
+    logic[31:0] r_dvsr,next_dvsr;
+     logic[4:0] r_bit_count,next_bit_count;
+     logic[7:0] r_din,next_din;
+     logic[7:0] r_dout,next_dout;
+    phase r_phase,next_phase;
+    logic r_slave_ack,next_slave_ack;
+    logic r_finished,next_finished;
     
     always_ff @(posedge clk,negedge nrst)
     begin
         if(!nrst)
             begin
                 r_state<=IDLE;
+                r_command<=common::COMMAND_IDLE;
+                r_ready<=0;
+                r_sda<=1'b1;
+                r_scl<=1'b1;
+                r_dvsr<=0;
+                r_bit_count<=8;
+                r_phase<=ADDR;
+                r_din<=0;
+                r_slave_ack<=0;
+                r_dout<=0;
+                r_finished<=0;
             end
          else
             begin
-                r_state<=next_state;    
+                r_state<=next_state;
+                r_command<=next_command;
+                r_ready<=next_ready;
+                r_sda<=next_sda;
+                r_scl<=next_scl;
+                r_dvsr<=next_dvsr;    
+                r_bit_count<=next_bit_count;
+                r_phase<=next_phase;
+                r_din<=next_din;
+                r_slave_ack<=next_slave_ack;
+                r_dout<=next_dout;
+                r_finished<=next_finished;
             end
     end
-    
     
     always_comb
     begin
         next_state=r_state;
+        next_ready=0;
+        next_command=r_command;
+        next_sda=r_sda;
+        next_scl=r_scl;
+        next_dvsr=r_dvsr;
+        next_bit_count=r_bit_count;
+        next_din=r_din;
+        next_phase=r_phase;
+        next_slave_ack=r_slave_ack;
+        next_dout<=r_dout;
+        next_finished=0;
         case (r_state)
             IDLE:
                 begin
-                    if(command==common::READ)
+                    next_ready=1;
+                    if(command!=common::COMMAND_IDLE)
                         begin
-                        end
-                    else if (command==common::WRITE)
-                        begin
+                            next_command=command;
+                            next_state=START;
+                            next_dvsr=0;
+                            next_din=din;
+                            next_phase=ADDR;
+                            next_scl=1;
+                            next_sda=1;
                         end
                 end
             START:
                 begin
+                    next_sda=0;
+                    if(r_dvsr==DVSR)
+                        begin
+                            next_state=D1;
+                            next_dvsr=0;
+                            next_scl=0;
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;
+                    
                 end
             D1:
                 begin
+                 if(r_dvsr==DVSR)
+                        begin
+                            next_state=D2;
+                            next_dvsr=0;
+                            if(r_command==common::COMMAND_READ)
+                                begin
+                                    if(r_phase==ADDR)
+                                        begin
+                                            next_sda=DEVICE_ADDR_R[r_bit_count];
+                                        end
+                                    else if(r_phase==DATA)
+                                        begin
+                                             next_sda=r_dout[r_bit_count];
+                                        end
+                                end
+                            else
+                                begin
+                                end
+                        
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;
                 end
             D2:
                 begin
+                    if(r_dvsr==DVSR)
+                        begin
+                            next_state=D3;
+                            next_dvsr=0;
+                            next_scl=1'b1;
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;
                 end
             D3:
                 begin
+                     if(r_dvsr==DVSR)
+                        begin
+                            next_state=D4;
+                            next_dvsr=0;
+                            next_scl=1'b0;
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;
                 end
             D4:
                 begin
+                     if(r_dvsr==DVSR)
+                        begin
+                            if(r_command==common::COMMAND_READ)
+                                begin
+                                    next_state=DEV_ACK;
+                                end
+                            
+                            next_dvsr=0;
+                            if(r_phase==ADDR && r_bit_count==0)
+                                begin
+                                    next_phase=DATA;
+                                end
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;
                 end
+            DEV_ACK:
+                begin
+                    next_sda=1;
+                    if(r_dvsr==2*DVSR)
+                        begin
+                            next_slave_ack=sda;
+                        end
+                    else if(r_dvsr==4*DVSR)
+                        begin
+                            if (r_phase==ADDR)
+                                begin
+                                    next_state=START;
+                                    next_dvsr=0;
+                                end
+                            else
+                                begin
+                                   next_state=STOP;
+                                   next_dvsr=0;
+                                end
+                         
+                        end
+                    else
+                        next_dvsr=r_dvsr+1;                        
+                end
+            
             STOP:
                 begin
+                     next_sda=0;
+                      if(r_dvsr==2*DVSR)
+                        begin
+                           next_sda=1;
+                           next_state=IDLE;
+                           next_finished=1;
+                        end
+                      else
+                            next_dvsr=r_dvsr+1;  
                 end
         endcase
     end
     
     
+    assign dout=r_dout;
+    assign scl=r_scl==1?1'bz:0;
+    assign sda=r_sda==1?1'bz:0;
+    assign finished=r_finished;
 endmodule

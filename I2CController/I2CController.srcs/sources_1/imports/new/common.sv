@@ -43,7 +43,7 @@ typedef enum logic [6:0] {
     F     = ~7'b1110001  // Upper 'F' (Segments a,e,f,g)
 } SSEG_NUM;
                          
-typedef enum logic [3:0]  {IDLE=4'd0,READ=4'd1,WRITE=4'd2} I2C_COMMAND ;    
+typedef enum logic [3:0]  {COMMAND_IDLE=4'd0,COMMAND_READ=4'd1,COMMAND_WRITE=4'd2} I2C_COMMAND ;    
 
 
 endpackage : common
