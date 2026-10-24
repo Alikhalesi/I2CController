@@ -21,7 +21,7 @@
 
 
 module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000_00/(SCL_FREQ*4)),localparam logic[7:0] DEVICE_ADDR_WR=8'b10101010
-,localparam logic[7:0] DEVICE_ADDR_R=8'b10101010)
+,localparam logic[7:0] DEVICE_ADDR_R=8'b10101010,localparam logic[7:0] REG_ADDRESS=8'b10101010)
 (
     input logic clk,
     input logic nrst,
@@ -34,8 +34,8 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     output logic finished
     );
     
-    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7} state;
-    typedef enum logic {ADDR=1'd0,DATA=1'd1} phase;
+    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7,MASTER_ACK=4'd8,RESTART=4'd9} state;
+    typedef enum logic[1:0] {ADDR=2'd00,REG_ADDR=2'b01,DATA=2'b10,ADDR2=2'b11} phase;
     
     state r_state,next_state;
     common::I2C_COMMAND r_command,next_command;
@@ -48,6 +48,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     phase r_phase,next_phase;
     logic r_slave_ack,next_slave_ack;
     logic r_finished,next_finished;
+    logic r_restarted,next_restarted;
     
     always_ff @(posedge clk,negedge nrst)
     begin
@@ -65,6 +66,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_slave_ack<=0;
                 r_dout<=0;
                 r_finished<=0;
+                r_restarted<=0;
             end
          else
             begin
@@ -80,6 +82,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_slave_ack<=next_slave_ack;
                 r_dout<=next_dout;
                 r_finished<=next_finished;
+                r_restarted<=next_restarted;
             end
     end
     
@@ -97,6 +100,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
         next_slave_ack=r_slave_ack;
         next_dout<=r_dout;
         next_finished=0;
+        next_restarted<=r_restarted;
         case (r_state)
             IDLE:
                 begin
@@ -134,10 +138,14 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_dvsr=0;
                             if(r_command==common::COMMAND_READ)
                                 begin
-                                    if(r_phase==ADDR)
+                                    if(r_phase==ADDR || r_phase==ADDR2)
                                         begin
                                             next_sda=DEVICE_ADDR_R[r_bit_count];
                                         end
+                                    else if (r_phase==REG_ADDR)
+                                        begin
+                                            next_sda=REG_ADDRESS[r_bit_count];
+                                        end    
                                     else if(r_phase==DATA)
                                         begin
                                              next_sda=r_dout[r_bit_count];
@@ -179,14 +187,14 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                         begin
                             next_dvsr=0;
                             if(r_bit_count==0)
-                                if (r_phase==ADDR)
+                                if (r_phase==ADDR || r_phase==REG_ADDR || r_phase==ADDR2)
                                     begin
                                         next_state=DEV_ACK;
                                         next_sda=1;// make the pin az Z 
                                     end
                                  else
                                     begin
-                                        next_state=STOP;
+                                        next_state=MASTER_ACK;
                                     end
                             else
                                 begin
@@ -218,15 +226,77 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                         
                     if(r_dvsr==4*DVSR)
                                 begin
-                                    next_state=D1;
+                                if(r_phase==ADDR)
+                                    begin
+                                        if(r_restarted)
+                                            begin
+                                             next_phase=DATA;
+                                              next_state=D1;
+                                               next_dvsr=0;
+                                              next_bit_count=7;
+                                            end
+                                        else
+                                            begin
+                                              next_phase=REG_ADDR;
+                                              next_state=D1;
+                                               next_dvsr=0;
+                                              next_bit_count=7;
+                                            end
+                                  
+                                    end
+                                 else if (r_phase==REG_ADDR)
+                                    begin
+                                    next_phase=ADDR2;
+                                    next_state=RESTART;
                                     next_dvsr=0;
                                     next_bit_count=7;
+                                    end 
+                                else if (r_phase==ADDR2)
+                                    begin
                                     next_phase=DATA;
+                                    next_state=START;
+                                    next_dvsr=0;
+                                    next_bit_count=7;
+                                    end 
                                 end
                          
                                     
                 end
-            
+             RESTART:
+                begin
+                         if(r_dvsr==DVSR)
+                        begin
+                            next_sda=1;
+                            next_dvsr=r_dvsr+1;
+                        end
+                        else if(r_dvsr==2*DVSR)
+                            begin
+                                next_scl=1;
+                                next_dvsr=r_dvsr+1;
+                            end
+                          else if(r_dvsr==3*DVSR)
+                            begin
+                                next_scl=0;
+                                 next_dvsr=r_dvsr+1;
+                            end
+                            else if(r_dvsr==4*DVSR)
+                            begin
+                                next_dvsr=0;
+                                  next_state=D1;
+                                next_phase=ADDR;
+                                next_restarted=1;
+                            end
+                         else
+                               next_dvsr=r_dvsr+1;
+                    
+                  
+                end   
+                
+                
+            MASTER_ACK:
+            begin
+                next_state=STOP;
+            end
             STOP:
                 begin
                    next_sda=0;

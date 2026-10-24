@@ -40,8 +40,8 @@ module tb_i2c_master(
     logic finished;
 
     // Pull-up resistors for the I2C Open-Drain Bus
-   // pullup(sda);
-   // pullup(scl);
+    pullup(sda);
+    pullup(scl);
 
     // Slave Emulation Signals (To drive sda during Read/ACK phases)
     logic sda_out;
@@ -75,10 +75,11 @@ module tb_i2c_master(
     endtask
 
     task automatic emulate_slave_tx_byte(input logic [7:0] data_to_send);
-        sda_oe = 1'b1;
+        
         for (int i = 7; i >= 0; i--) begin
             @(negedge scl);
             sda_out = data_to_send[i];
+            sda_oe = 1'b1;
         end
         // Wait for Master ACK phase, release the line
         @(negedge scl);
@@ -133,13 +134,20 @@ module tb_i2c_master(
         command = common::COMMAND_READ; 
         @(posedge clk);
         wait(ready == 1'b0);
-
+ command = common::COMMAND_IDLE;
         // Emulate Slave ACK for (Device Address + R)
-      //  emulate_slave_rx_ack();
+            repeat(8) begin
+            @(negedge scl);
+        end
+        emulate_slave_rx_ack();
 
+            repeat(16) begin
+            @(negedge scl);
+        end
+         emulate_slave_rx_ack();
         // Emulate Slave sending the requested register data (e.g., 0xA5)
         $display("[TB] Slave driving data byte 0xA5 onto the bus...");
-        //emulate_slave_tx_byte(8'hA5);
+        emulate_slave_tx_byte(8'hA5);
 
         // Master should now issue a NACK followed by a STOP condition.
         wait(finished == 1'b1);
