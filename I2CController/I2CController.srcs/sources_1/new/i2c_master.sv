@@ -20,13 +20,13 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000_00/(SCL_FREQ*4)),localparam logic[7:0] DEVICE_ADDR_WR=7'b10010000
-,localparam logic[7:0] DEVICE_ADDR_R=7'b10010001)
+module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000_00/(SCL_FREQ*4)),localparam logic[7:0] DEVICE_ADDR_WR=8'b10101010
+,localparam logic[7:0] DEVICE_ADDR_R=8'b10101010)
 (
     input logic clk,
     input logic nrst,
     inout tri sda,
-    inout tri scl,
+    output tri scl,
     input logic[7:0] din,
     output logic[7:0] dout,
     input common::I2C_COMMAND command,
@@ -59,7 +59,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_sda<=1'b1;
                 r_scl<=1'b1;
                 r_dvsr<=0;
-                r_bit_count<=8;
+                r_bit_count<=7;
                 r_phase<=ADDR;
                 r_din<=0;
                 r_slave_ack<=0;
@@ -110,6 +110,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_phase=ADDR;
                             next_scl=1;
                             next_sda=1;
+                            next_bit_count=7;
                         end
                 end
             START:
@@ -176,15 +177,21 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 begin
                      if(r_dvsr==DVSR)
                         begin
-                            if(r_command==common::COMMAND_READ)
-                                begin
-                                    next_state=DEV_ACK;
-                                end
-                            
                             next_dvsr=0;
-                            if(r_phase==ADDR && r_bit_count==0)
+                            if(r_bit_count==0)
+                                if (r_phase==ADDR)
+                                    begin
+                                        next_state=DEV_ACK;
+                                        next_sda=1;// make the pin az Z 
+                                    end
+                                 else
+                                    begin
+                                        next_state=STOP;
+                                    end
+                            else
                                 begin
-                                    next_phase=DATA;
+                                    next_state=D1;
+                                    next_bit_count=r_bit_count-1;
                                 end
                         end
                     else
@@ -192,33 +199,44 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 end
             DEV_ACK:
                 begin
-                    next_sda=1;
                     if(r_dvsr==2*DVSR)
                         begin
+                            next_scl=1;
                             next_slave_ack=sda;
+                              next_dvsr=r_dvsr+1;   
+                           
                         end
-                    else if(r_dvsr==4*DVSR)
+                     else if(r_dvsr==3*DVSR)
                         begin
-                            if (r_phase==ADDR)
+                            next_scl=0;
+                              next_dvsr=r_dvsr+1;   
+                        end
+                      else
+                           next_dvsr=r_dvsr+1;   
+                        
+                        
+                        
+                    if(r_dvsr==4*DVSR)
                                 begin
-                                    next_state=START;
+                                    next_state=D1;
                                     next_dvsr=0;
-                                end
-                            else
-                                begin
-                                   next_state=STOP;
-                                   next_dvsr=0;
+                                    next_bit_count=7;
+                                    next_phase=DATA;
                                 end
                          
-                        end
-                    else
-                        next_dvsr=r_dvsr+1;                        
+                                    
                 end
             
             STOP:
                 begin
-                     next_sda=0;
-                      if(r_dvsr==2*DVSR)
+                   next_sda=0;
+                 
+                    if(r_dvsr==DVSR)
+                        begin
+                           next_scl=1;
+                           next_dvsr=r_dvsr+1; 
+                        end
+                      else if(r_dvsr==2*DVSR)
                         begin
                            next_sda=1;
                            next_state=IDLE;
@@ -232,7 +250,8 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     
     
     assign dout=r_dout;
-    assign scl=r_scl==1?1'bz:0;
-    assign sda=r_sda==1?1'bz:0;
+    assign scl=r_scl==1?1'bZ:0;
+    assign sda=(r_sda==1 || r_state==DEV_ACK)?1'bZ:1'b0;
     assign finished=r_finished;
+    assign ready=r_ready;
 endmodule
