@@ -146,6 +146,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                         begin
                                             next_sda=REG_ADDRESS[r_bit_count];
                                         end    
+                                  
                                 end
                             else
                                 begin
@@ -295,12 +296,19 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
               if(r_dvsr==2*DVSR)
                             begin
                                 next_scl=1;
-                                   next_sda=1;
+                                   //next_sda=1;
                                 next_dvsr=r_dvsr+1;
+                            end
+                             else if(r_dvsr==3*DVSR)
+                            begin
+                           
+                                     next_scl=0;
+                                  next_dvsr=r_dvsr+1;
                             end
                             else if(r_dvsr==4*DVSR)
                             begin
                                 next_dvsr=0;
+                                next_sda=0;
                                   next_state=STOP;
                                 next_bit_count=7;
                                 
