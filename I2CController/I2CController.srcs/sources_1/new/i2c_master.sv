@@ -34,7 +34,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     output logic finished
     );
     
-    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7,MASTER_ACK=4'd8,RESTART=4'd9} state;
+    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7,MASTER_NACK=4'd8,RESTART=4'd9} state;
     typedef enum logic[1:0] {ADDR=2'd00,REG_ADDR=2'b01,DATA=2'b10,ADDR2=2'b11} phase;
     
     state r_state,next_state;
@@ -98,9 +98,9 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
         next_din=r_din;
         next_phase=r_phase;
         next_slave_ack=r_slave_ack;
-        next_dout<=r_dout;
+        next_dout=r_dout;
         next_finished=0;
-        next_restarted<=r_restarted;
+        next_restarted=r_restarted;
         case (r_state)
             IDLE:
                 begin
@@ -194,7 +194,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     end
                                  else
                                     begin
-                                        next_state=MASTER_ACK;
+                                        next_state=MASTER_NACK;
                                     end
                             else
                                 begin
@@ -211,6 +211,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                         begin
                             next_scl=1;
                             next_slave_ack=sda;
+                          
                               next_dvsr=r_dvsr+1;   
                            
                         end
@@ -248,6 +249,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     begin
                                     next_phase=ADDR2;
                                     next_state=RESTART;
+                                    next_sda=1;
                                     next_dvsr=0;
                                     next_bit_count=7;
                                     end 
@@ -264,27 +266,21 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 end
              RESTART:
                 begin
-                         if(r_dvsr==DVSR)
-                        begin
-                            next_sda=1;
-                            next_dvsr=r_dvsr+1;
-                        end
-                        else if(r_dvsr==2*DVSR)
+                         
+                         if(r_dvsr==2*DVSR)
                             begin
                                 next_scl=1;
+                                   next_sda=1;
                                 next_dvsr=r_dvsr+1;
-                            end
-                          else if(r_dvsr==3*DVSR)
-                            begin
-                                next_scl=0;
-                                 next_dvsr=r_dvsr+1;
                             end
                             else if(r_dvsr==4*DVSR)
                             begin
                                 next_dvsr=0;
-                                  next_state=D1;
+                                  next_state=START;
                                 next_phase=ADDR;
+                                next_bit_count=7;
                                 next_restarted=1;
+                                
                             end
                          else
                                next_dvsr=r_dvsr+1;
@@ -293,9 +289,24 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 end   
                 
                 
-            MASTER_ACK:
+            MASTER_NACK:
             begin
-                next_state=STOP;
+              if(r_dvsr==2*DVSR)
+                            begin
+                                next_scl=1;
+                                   next_sda=1;
+                                next_dvsr=r_dvsr+1;
+                            end
+                            else if(r_dvsr==4*DVSR)
+                            begin
+                                next_dvsr=0;
+                                  next_state=STOP;
+                                next_bit_count=7;
+                                
+                            end
+                         else
+                               next_dvsr=r_dvsr+1;
+              
             end
             STOP:
                 begin

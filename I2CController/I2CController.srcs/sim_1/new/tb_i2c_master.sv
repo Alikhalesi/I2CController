@@ -9,22 +9,20 @@
 // Project Name: 
 // Target Devices: 
 // Tool Versions: 
-// Description: 
+// Description: Testbench for unified I2C Master read sequence with exact
+//              START / Repeated START SCL edge synchronization.
 // 
 // Dependencies: 
 // 
 // Revision:
-// Revision 0.01 - File Created
+// Revision 0.03 - Added edge tracking for SCL drop after START conditions
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
-module tb_i2c_master(
-
-    );
+module tb_i2c_master();
     
-   // Clock and Reset Signals
+    // Clock and Reset Signals
     logic clk;
     logic nrst;
 
@@ -49,7 +47,7 @@ module tb_i2c_master(
     assign sda = sda_oe ? sda_out : 1'bz;
 
     // Instantiate the Unit Under Test (UUT)
-    i2c_master  uut (
+    i2c_master uut (
         .clk(clk),
         .nrst(nrst),
         .sda(sda),
@@ -64,25 +62,25 @@ module tb_i2c_master(
     // 100MHz Clock Generation (10ns period)
     always #5 clk = ~clk;
 
-    // Helper task to emulate the slave behavior for 1 byte (ACK or Data transmission)
+    // Helper task to emulate the slave behavior for 1 byte (ACK transmission)
+    // Expects to be called right at the falling edge of the 8th data bit
     task automatic emulate_slave_rx_ack();
-        // Wait for falling edge of SCL where Master expects ACK
-        @(negedge scl);
         sda_out = 1'b0; // Drive ACK (Low)
         sda_oe  = 1'b1;
+        // Hold through the 9th clock cycle, release on the subsequent falling edge
         @(negedge scl);
-        sda_oe  = 1'b0; // Release bus
+        sda_oe  = 1'b0; // Release bus back to High-Z
     endtask
 
+    // Helper task to emulate the slave transmitting a data byte to the master
+    // Expects to be called right at the falling edge of the preceding 9th clock pulse
     task automatic emulate_slave_tx_byte(input logic [7:0] data_to_send);
-        
         for (int i = 7; i >= 0; i--) begin
-            @(negedge scl);
             sda_out = data_to_send[i];
             sda_oe = 1'b1;
+            @(negedge scl); // Wait for the current data bit to be sampled
         end
-        // Wait for Master ACK phase, release the line
-        @(negedge scl);
+        // Master ACK/NACK phase: release the line right at the 8th bit's falling edge
         sda_oe = 1'b0;
     endtask
 
@@ -91,7 +89,7 @@ module tb_i2c_master(
         // Initialize Signals
         clk = 0;
         nrst = 1;
-        din = 8'h00;
+        din = 8'h2F; // The ADT7430 target register address (Device ID Pointer)
         command = common::COMMAND_IDLE; 
         sda_out = 1'b1;
         sda_oe = 1'b0;
@@ -102,56 +100,45 @@ module tb_i2c_master(
         #40;
         nrst = 1;
         #40;
-        // Ensure master is ready
+        
+        // Ensure master is ready before starting
         wait(ready == 1'b1);
         @(posedge clk);
 
-//        // ==========================================================
-//        // STEP 1: Write the Register Address (e.g., 0x3A)
-//        // ==========================================================
-//        $display("[TB] Starting Register Read Sequence...");
-        
-//        din = 8'h3A; 
-//        command = common::COMMAND_WRITE; 
-//        @(posedge clk);
-        
-//        // Wait for master to start processing
-//        wait(ready == 1'b0); 
-        
-//        // Emulate Slave ACKs for (Device Address + W) and then the (Register Address)
-//        emulate_slave_rx_ack(); // ACK for Device Write Address
-//        emulate_slave_rx_ack(); // ACK for Register Address Data
-        
-//        // Wait for Write Phase to finish
-//        wait(finished == 1'b1);
-//        command = common::COMMAND_IDLE;
-//        @(posedge clk);
-
         // ==========================================================
-        // STEP 2: Repeated START + Read Data Phase
+        // SINGLE COMMAND TRANSACTION: Combined Write-then-Read Sequence
         // ==========================================================
-        // Trigger Read Command (Should initiate Repeated Start + Device Address + R)
+        $display("[TB] Sending single COMMAND_READ to trigger complete sequence...");
+           
         command = common::COMMAND_READ; 
         @(posedge clk);
         wait(ready == 1'b0);
- command = common::COMMAND_IDLE;
-        // Emulate Slave ACK for (Device Address + R)
-            repeat(8) begin
-            @(negedge scl);
-        end
-        emulate_slave_rx_ack();
+       //  @(negedge sda);              // Wait for master to claim the bus
+        command = common::COMMAND_IDLE; // Clear command tracking immediately
+        
+        // --- 1st ACK: Device Address + W ---
+    //    @(negedge sda);                 // 1. Catch the initial START condition (SDA drops while SCL is high)
+        @(negedge scl);                 // 2. Consume the SCL falling edge caused by the START routine
+        repeat(8) @(negedge scl);       // 3. Count exactly 8 data bits
+        emulate_slave_rx_ack();         // 4. Drive ACK on the 9th clock pulse
 
-            repeat(16) begin
-            @(negedge scl);
-        end
-         emulate_slave_rx_ack();
-        // Emulate Slave sending the requested register data (e.g., 0xA5)
+        // --- 2nd ACK: Register Address Data ---
+        // Alignment is already matched since the previous task ended on a falling SCL edge
+        repeat(8) @(negedge scl);       // Count 8 bits of the register location pointer
+        emulate_slave_rx_ack();         // Drive ACK on the 9th clock pulse
+
+        // --- 3rd ACK: Device Address + R (After Repeated Start) ---
+        @(negedge sda);                 // 1. Catch the Repeated START condition signature on the bus
+        @(negedge scl);                 // 2. Consume the SCL falling edge terminating the Repeated START phase
+        repeat(8) @(negedge scl);       // 3. Count 8 bits of the re-addressing read packet
+        emulate_slave_rx_ack();         // 4. Drive ACK on the 9th clock pulse
+
+        // --- Data Phase: Slave Transmits Requested Register Value to Master ---
         $display("[TB] Slave driving data byte 0xA5 onto the bus...");
-        emulate_slave_tx_byte(8'hA5);
+        emulate_slave_tx_byte(8'hA5);   // Slave drives data, master will sample and issue NACK
 
-        // Master should now issue a NACK followed by a STOP condition.
-        wait(finished == 1'b1);
-        command = common::COMMAND_IDLE;
+        // --- End of Transaction ---
+        wait(finished == 1'b1);         // Wait for master to issue NACK + STOP and flag completion
         
         // Verify Data Latch
         if (dout === 8'hA5) begin
@@ -164,5 +151,4 @@ module tb_i2c_master(
         $finish;
     end
 
-    
 endmodule
