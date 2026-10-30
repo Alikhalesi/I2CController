@@ -53,7 +53,8 @@ debouncer btn_debouncer(.d(btn),.q(btn_debounced),.clk(clk),.nrst(synced_rst));
      logic master_ready;
      logic master_finished;
     logic slave_ack;
-     
+     logic [7:0] reg_addr;
+     assign reg_addr=8'h0B;
      i2c_master master(
      .clk(clk),
     .nrst(synced_rst),
@@ -63,7 +64,8 @@ debouncer btn_debouncer(.d(btn),.q(btn_debounced),.clk(clk),.nrst(synced_rst));
     .command(r_command),
     .ready(master_ready),
     .finished(master_finished),
-    .slave_ack(slave_ack)
+    .slave_ack(slave_ack),
+    .reg_addr(reg_addr)
      );
 
     
@@ -87,7 +89,7 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
 
 
     
-    
+
     typedef enum logic [1:0] {IDLE=2'd0,START=2'd1,WAIT_FOR_FINISHED=2'd2} state;
     state r_state,next_state;
 

@@ -21,7 +21,7 @@
 
 
 module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000_00/(SCL_FREQ*4)),localparam logic[7:0] DEVICE_ADDR_WR=8'b10101010
-,localparam logic[7:0] DEVICE_ADDR_R=8'b10010111,localparam logic[7:0] DEVICE_ADDR_W=8'b10010110,localparam logic[7:0] REG_ADDRESS=8'h0B)
+,localparam logic[7:0] DEVICE_ADDR_R=8'b10010111,localparam logic[7:0] DEVICE_ADDR_W=8'b10010110)
 (
     input logic clk,
     input logic nrst,
@@ -31,7 +31,8 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     input common::I2C_COMMAND command,
     output logic ready,
     (* mark_debug = "true" *)  output logic finished,
-    output logic slave_ack
+    output logic slave_ack,
+    input logic [7:0] reg_addr
     );
     
     typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd9,MASTER_NACK=4'd8,RESTART=4'd7} state;
@@ -45,6 +46,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
      logic[4:0] r_bit_count,next_bit_count;
      logic[7:0] r_din,next_din;
      logic[7:0] r_dout,next_dout;
+     logic[7:0] r_reg_addr,next_reg_addr;
     phase r_phase,next_phase;
   (* mark_debug = "true" *)    logic r_slave_ack,next_slave_ack;
     logic r_master_nack,next_master_nack;
@@ -68,6 +70,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_finished<=0;
                 r_restarted<=0;
                 r_master_nack<=0;
+                r_reg_addr<=0;
             end
          else
             begin
@@ -84,6 +87,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_finished<=next_finished;
                 r_restarted<=next_restarted;
                 r_master_nack<=next_master_nack;
+                r_reg_addr<=next_reg_addr;
             end
     end
     
@@ -103,6 +107,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
         next_finished=0;
         next_restarted=r_restarted;
         next_master_nack=r_master_nack;
+        next_reg_addr=r_reg_addr;
         case (r_state)
             IDLE:
                 begin
@@ -118,6 +123,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_bit_count=7;
                             next_restarted=0;
                             next_master_nack=0;
+                            next_reg_addr=reg_addr;
                         end
                 end
             START:
@@ -149,7 +155,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                         end
                                     else if (r_phase==REG_ADDR)
                                         begin
-                                            next_sda=REG_ADDRESS[r_bit_count];
+                                            next_sda=reg_addr[r_bit_count];
                                         end    
                                        next_state=D2;
                             next_dvsr=0;
