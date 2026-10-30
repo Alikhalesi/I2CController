@@ -116,6 +116,8 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_scl=1;
                             next_sda=1;
                             next_bit_count=7;
+                            next_restarted=0;
+                            next_master_nack=0;
                         end
                 end
             START:

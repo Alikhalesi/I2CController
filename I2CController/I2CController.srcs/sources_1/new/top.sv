@@ -90,20 +90,18 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
     
     typedef enum logic [1:0] {IDLE=2'd0,START=2'd1,WAIT_FOR_FINISHED=2'd2} state;
     state r_state,next_state;
-    logic onced,next_onced;
+
     always_ff @(posedge clk,negedge synced_rst)
         begin
             if(!synced_rst)
                 begin
                     r_command<=common::COMMAND_IDLE;
                     r_state<=IDLE;
-                    onced<=0;
                 end
              else
                 begin
                     r_command<=next_command;
                     r_state<=next_state;
-                    onced<=next_onced;
                 end
         end
         
@@ -114,9 +112,8 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
                 case (r_state)
                     IDLE:
                         begin
-                            if(btn_delayed && onced==0)
+                            if(btn_delayed)
                                 begin
-                                next_onced=1;
                                     next_state=START;
                                 end
                         end
