@@ -32,6 +32,11 @@ output logic led[6]
     
     );
     
+  logic sda_in;
+ logic scl_in;
+ assign sda_in = sda; // This is what the FPGA actually "sees" on the bus
+   assign scl_in = scl;
+    
     
       logic synced_rst;
     reset_synchronizer rst_synchronizer(.nrst(nrst),.clk(clk),.sync_nrst(synced_rst));
@@ -47,7 +52,7 @@ debouncer btn_debouncer(.d(btn),.q(btn_debounced),.clk(clk),.nrst(synced_rst));
      logic[7:0] dout;
      logic master_ready;
      logic master_finished;
-     logic slave_ack;
+    logic slave_ack;
      
      i2c_master master(
      .clk(clk),
@@ -85,17 +90,20 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
     
     typedef enum logic [1:0] {IDLE=2'd0,START=2'd1,WAIT_FOR_FINISHED=2'd2} state;
     state r_state,next_state;
+    logic onced,next_onced;
     always_ff @(posedge clk,negedge synced_rst)
         begin
             if(!synced_rst)
                 begin
                     r_command<=common::COMMAND_IDLE;
                     r_state<=IDLE;
+                    onced<=0;
                 end
              else
                 begin
                     r_command<=next_command;
                     r_state<=next_state;
+                    onced<=next_onced;
                 end
         end
         
@@ -106,8 +114,9 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
                 case (r_state)
                     IDLE:
                         begin
-                            if(btn_delayed)
+                            if(btn_delayed && onced==0)
                                 begin
+                                next_onced=1;
                                     next_state=START;
                                 end
                         end
@@ -118,14 +127,17 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
                         end
                     WAIT_FOR_FINISHED:
                         begin
+                            next_command<=common::COMMAND_IDLE;
                             if(master_finished)
                                 next_state=IDLE;
+                                
                         end
                 endcase
             end 
         
     assign led[0]  = !slave_ack;  
     assign led[1]  = r_state==IDLE;  
+    assign led[2]  = btn_delayed;  
     
     
 endmodule

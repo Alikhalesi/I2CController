@@ -45,14 +45,14 @@ module tb_i2c_master();
     logic sda_out;
     logic sda_oe;
     assign sda = sda_oe ? sda_out : 1'bz;
-
+    logic slave_ack;
     // Instantiate the Unit Under Test (UUT)
     i2c_master uut (
         .clk(clk),
         .nrst(nrst),
         .sda(sda),
         .scl(scl),
-        .din(din),
+        .slave_ack(slave_ack),
         .dout(dout),
         .command(command),
         .ready(ready),

@@ -25,28 +25,28 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
 (
     input logic clk,
     input logic nrst,
-    inout tri sda,
-    output tri scl,
+     (* mark_debug = "true" *)  inout tri sda,
+ (* mark_debug = "true" *)   output tri scl,
     output logic[7:0] dout,
     input common::I2C_COMMAND command,
     output logic ready,
-    output logic finished,
+    (* mark_debug = "true" *)  output logic finished,
     output logic slave_ack
     );
     
-    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd7,MASTER_NACK=4'd8,RESTART=4'd9} state;
+    typedef enum logic[3:0] {IDLE=4'd0,START=4'd1,D1=4'd2,D2=4'd3,D3=4'd4,D4=4'd5,DEV_ACK=4'd6,STOP=4'd9,MASTER_NACK=4'd8,RESTART=4'd7} state;
     typedef enum logic[1:0] {ADDR=2'd00,REG_ADDR=2'b01,DATA=2'b10,ADDR2=2'b11} phase;
     
-    state r_state,next_state;
+    (* mark_debug = "true" *) state r_state,next_state;
     common::I2C_COMMAND r_command,next_command;
     logic r_ready,next_ready;
-    logic r_sda,r_scl,next_sda,next_scl;
+ logic r_sda,r_scl,next_sda,next_scl;
     logic[31:0] r_dvsr,next_dvsr;
      logic[4:0] r_bit_count,next_bit_count;
      logic[7:0] r_din,next_din;
      logic[7:0] r_dout,next_dout;
     phase r_phase,next_phase;
-    logic r_slave_ack,next_slave_ack;
+  (* mark_debug = "true" *)    logic r_slave_ack,next_slave_ack;
     logic r_master_nack,next_master_nack;
     logic r_finished,next_finished;
     logic r_restarted,next_restarted;
@@ -135,8 +135,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 begin
                  if(r_dvsr==DVSR)
                         begin
-                            next_state=D2;
-                            next_dvsr=0;
+                       
                             if(r_command==common::COMMAND_READ)
                                 begin
                                     if(r_phase==ADDR || r_phase==ADDR2)
@@ -150,7 +149,8 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                         begin
                                             next_sda=REG_ADDRESS[r_bit_count];
                                         end    
-                                  
+                                       next_state=D2;
+                            next_dvsr=0;
                                 end
                             else
                                 begin
@@ -175,7 +175,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 begin
                   if(r_phase==DATA && r_dvsr==0)
                             begin
-                              next_dout={dout[6:0],sda};
+                              next_dout={r_dout[6:0],sda};
                             end
                      if(r_dvsr==DVSR)
                         begin
@@ -218,7 +218,9 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_scl=1;
                             next_slave_ack=sda;
                           
-                              next_dvsr=r_dvsr+1;   
+                              next_dvsr=r_dvsr+1;  
+                               
+                        
                            
                         end
                      else if(r_dvsr==3*DVSR)
@@ -253,6 +255,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     end
                                  else if (r_phase==REG_ADDR)
                                     begin
+                                   
                                     next_phase=ADDR2;
                                     next_state=RESTART;
                                     next_sda=1;
@@ -323,21 +326,30 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
             end
             STOP:
                 begin
-                   next_sda=0;
+                  
                  
                     if(r_dvsr==DVSR)
                         begin
                            next_scl=1;
+                             next_sda=0;
                            next_dvsr=r_dvsr+1; 
                         end
-                      else if(r_dvsr==2*DVSR)
+                      else if(r_dvsr==DVSR+5)
                         begin
                            next_sda=1;
-                           next_state=IDLE;
-                           next_finished=1;
+                        next_dvsr=r_dvsr+1;
                         end
+                          else if(r_dvsr==4*DVSR)
+                          begin
+                               next_state=IDLE;
+                                   next_sda=1;
+                           next_finished=1;
+                          end
                       else
-                            next_dvsr=r_dvsr+1;  
+                        begin
+                            next_dvsr=r_dvsr+1;
+                             next_sda=0;
+                         end  
                 end
         endcase
     end
@@ -345,7 +357,10 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
     assign slave_ack=r_slave_ack;
     assign dout=r_dout;
     assign scl=r_scl==1?1'bZ:0;
-    assign sda=(r_sda==1 || r_state==DEV_ACK)?1'bZ:1'b0;
+    
+    
+    
+    assign sda=((r_state==DEV_ACK)?1'bZ:(r_sda==1)?1'bZ:1'b0);
     assign finished=r_finished;
     assign ready=r_ready;
 endmodule
