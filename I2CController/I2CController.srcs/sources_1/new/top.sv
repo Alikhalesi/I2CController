@@ -28,6 +28,7 @@ output tri scl,
 output logic[7:0] sseg_data,
 output logic[7:0] sseg_ctrl,
 input logic btn,
+input logic btn_write,
 output logic led[6]
     
     );
@@ -48,13 +49,20 @@ debouncer btn_debouncer(.d(btn),.q(btn_debounced),.clk(clk),.nrst(synced_rst));
      delay_signal btn_delay(.clk(clk),.nrst(nrst),.d(btn_debounced),.q(btn_delayed));
      
      
+             logic btn_write_debounced;
+debouncer btn_write_debouncer(.d(btn_write),.q(btn_write_debounced),.clk(clk),.nrst(synced_rst));
+    
+    logic btn_write_delayed;
+     delay_signal btn_write_delay(.clk(clk),.nrst(nrst),.d(btn_write_debouncer),.q(btn_write_delayed));
+     
+     
      common::I2C_COMMAND r_command,next_command;
      logic[7:0] dout;
      logic master_ready;
      logic master_finished;
     logic slave_ack;
      logic [7:0] reg_addr;
-     assign reg_addr=8'h0B;
+     assign reg_addr=8'h0A;
      i2c_master master(
      .clk(clk),
     .nrst(synced_rst),

@@ -46,6 +46,7 @@ module tb_i2c_master();
     logic sda_oe;
     assign sda = sda_oe ? sda_out : 1'bz;
     logic slave_ack;
+    logic [7:0] reg_addr;
     // Instantiate the Unit Under Test (UUT)
     i2c_master uut (
         .clk(clk),
@@ -56,7 +57,8 @@ module tb_i2c_master();
         .dout(dout),
         .command(command),
         .ready(ready),
-        .finished(finished)
+        .finished(finished),
+        .reg_addr(reg_addr)
     );
 
     // 100MHz Clock Generation (10ns period)

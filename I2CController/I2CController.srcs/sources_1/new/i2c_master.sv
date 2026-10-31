@@ -160,8 +160,18 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                        next_state=D2;
                             next_dvsr=0;
                                 end
-                            else
+                            else if (r_command==common::COMMAND_WRITE)
                                 begin
+                                    if (r_phase==ADDR)
+                                        begin
+                                             next_sda=DEVICE_ADDR_W[r_bit_count];
+                                        end
+                                    else if (r_phase==REG_ADDR)
+                                        begin
+                                             next_sda=reg_addr[r_bit_count];
+                                        end
+                                             next_state=D2;
+                            next_dvsr=0;
                                 end
                         
                         end
@@ -183,7 +193,15 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 begin
                   if(r_phase==DATA && r_dvsr==0)
                             begin
-                              next_dout={r_dout[6:0],sda};
+                                 if(r_command==common::COMMAND_READ)
+                                    begin
+                                           next_dout={r_dout[6:0],sda};
+                                    end
+                                 else if (r_command==common::COMMAND_READ)
+                                    begin
+                                        next_sda=r_din[r_bit_count];
+                                    end
+                        
                             end
                      if(r_dvsr==DVSR)
                         begin
@@ -243,6 +261,9 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                         
                     if(r_dvsr==4*DVSR)
                                 begin
+                                
+                              if(r_command==common::COMMAND_READ)
+                                begin     
                                 if(r_phase==ADDR)
                                     begin
                                         if(r_restarted)
@@ -278,6 +299,31 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     next_bit_count=7;
                                     end 
                                 end
+                             end
+                           else if (r_command==common::COMMAND_WRITE)
+                            begin
+                                  if(r_phase==ADDR)
+                                            begin
+                                              next_phase=REG_ADDR;
+                                              next_state=D1;
+                                               next_dvsr=0;
+                                              next_bit_count=7;
+                                            end
+                                  else if (r_phase==REG_ADDR)
+                                    begin
+                                         next_phase=DATA;
+                                    next_state=D1;
+                                    next_dvsr=0;
+                                    next_bit_count=7;
+                                    end
+                                     else if (r_phase==REG_ADDR)
+                                    begin
+                                     next_dvsr=0;
+                                next_sda=0;
+                                  next_state=STOP;
+                                next_bit_count=7;
+                                    end
+                            end    
                          
                                     
                 end
