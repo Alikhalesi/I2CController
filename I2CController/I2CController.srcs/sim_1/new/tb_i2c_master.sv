@@ -88,6 +88,7 @@ module tb_i2c_master();
 
     // Main Test Sequence
     initial begin
+    bit run_write = 1; bit run_read = 0;
         // Initialize Signals
         clk = 0;
         nrst = 1;
@@ -110,8 +111,9 @@ module tb_i2c_master();
         // ==========================================================
         // SINGLE COMMAND TRANSACTION: Combined Write-then-Read Sequence
         // ==========================================================
+                 if (run_read) begin
         $display("[TB] Sending single COMMAND_READ to trigger complete sequence...");
-           
+     
         command = common::COMMAND_READ; 
         @(posedge clk);
         wait(ready == 1'b0);
@@ -148,6 +150,48 @@ module tb_i2c_master();
         end else begin
             $display("[TB] ERROR: Read data mismatch! Expected: 0xA5, Got: %h", dout);
         end
+
+ #200;
+end
+if (run_write) begin
+        // ==========================================================
+        // TRANSACTION 2: Write Sequence
+        // ==========================================================
+        wait(ready == 1'b1);
+        @(posedge clk);
+        $display("[TB] Sending COMMAND_WRITE to trigger write sequence...");
+        
+        reg_addr = 8'h3A;               // Register address to be written
+        din = 8'h55;                    // Data payload to write into the register
+        command = common::COMMAND_WRITE;
+        @(posedge clk);
+        wait(ready == 1'b0);
+        command = common::COMMAND_IDLE; 
+
+        // --- 1st ACK: Device Address + W ---
+      //  @(negedge sda);                 // Catch START condition
+        @(negedge scl);                 // Consume first SCL drop
+        repeat(8) @(negedge scl);       // Count 8 bits (Device Addr + W)
+        emulate_slave_rx_ack();         // Slave ACKs
+
+        // --- 2nd ACK: Register Address ---
+        repeat(8) @(negedge scl);       // Count 8 bits (Register Address)
+        emulate_slave_rx_ack();         // Slave ACKs
+
+        // --- 3rd ACK: Data Payload (Master writing to Slave) ---
+        $display("[TB] Monitoring Master writing data payload...");
+        repeat(8) @(negedge scl);       // Count 8 bits (Data driven by Master)
+        emulate_slave_rx_ack();         // Slave ACKs the written data
+
+        // --- End of Transaction ---
+        wait(finished == 1'b1);         // Wait for master to generate STOP condition
+        $display("[TB] SUCCESS: Write sequence completed.");
+
+end
+
+
+
+
 
         #500;
         $finish;

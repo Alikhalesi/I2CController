@@ -219,7 +219,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                         begin
                             next_dvsr=0;
                             if(r_bit_count==0)
-                                if (r_phase==ADDR || r_phase==REG_ADDR || r_phase==ADDR2)
+                                if (r_phase==ADDR || r_phase==REG_ADDR || r_phase==ADDR2 || r_command==common::COMMAND_WRITE)
                                     begin
                                         next_state=DEV_ACK;
                                         next_sda=1;// make the pin az Z 
@@ -245,21 +245,14 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_slave_ack=sda;
                           
                               next_dvsr=r_dvsr+1;  
-                               
-                        
-                           
                         end
                      else if(r_dvsr==3*DVSR)
                         begin
                             next_scl=0;
                               next_dvsr=r_dvsr+1;   
                         end
-                      else
-                           next_dvsr=r_dvsr+1;   
                         
-                        
-                        
-                    if(r_dvsr==4*DVSR)
+                      else  if(r_dvsr==4*DVSR)
                                 begin
                                 
                               if(r_command==common::COMMAND_READ)
@@ -299,7 +292,6 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     next_bit_count=7;
                                     end 
                                 end
-                             end
                            else if (r_command==common::COMMAND_WRITE)
                             begin
                                   if(r_phase==ADDR)
@@ -316,15 +308,17 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     next_dvsr=0;
                                     next_bit_count=7;
                                     end
-                                     else if (r_phase==REG_ADDR)
+                                     else if (r_phase==DATA)
                                     begin
                                      next_dvsr=0;
                                 next_sda=0;
                                   next_state=STOP;
                                 next_bit_count=7;
                                     end
-                            end    
-                         
+                            end  
+                         end     
+                       else
+                           next_dvsr=r_dvsr+1;    
                                     
                 end
              RESTART:
