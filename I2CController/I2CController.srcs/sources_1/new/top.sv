@@ -29,7 +29,7 @@ output logic[7:0] sseg_data,
 output logic[7:0] sseg_ctrl,
 input logic btn,
 input logic btn_write,
-output logic led[6]
+output logic[5:0] led
     
     );
     
@@ -58,12 +58,12 @@ debouncer btn_write_debouncer(.d(btn_write),.q(btn_write_debounced),.clk(clk),.n
      
      common::I2C_COMMAND r_command,next_command;
      logic[7:0] dout;
-     logic[7:0] din;
      logic master_ready;
      logic master_finished;
     logic slave_ack;
-     logic [7:0] reg_addr;
-     assign reg_addr=8'h0A;
+    logic [7:0] r_reg,next_reg;
+    logic [7:0] r_din,next_din;
+    
      i2c_master master(
      .clk(clk),
     .nrst(synced_rst),
@@ -74,8 +74,8 @@ debouncer btn_write_debouncer(.d(btn_write),.q(btn_write_debounced),.clk(clk),.n
     .ready(master_ready),
     .finished(master_finished),
     .slave_ack(slave_ack),
-    .reg_addr(reg_addr),
-    .din(din)
+    .reg_addr(r_reg),
+    .din(r_din)
      );
 
     
@@ -109,11 +109,15 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
                 begin
                     r_command<=common::COMMAND_IDLE;
                     r_state<=IDLE;
+                    r_reg<=0;
+                    r_din<=0;
                 end
              else
                 begin
                     r_command<=next_command;
                     r_state<=next_state;
+                    r_reg<=next_reg;
+                    r_din<=next_din;
                 end
         end
         
@@ -121,22 +125,34 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
             begin
                 next_command=r_command;
                 next_state=r_state;
+                next_reg=r_reg;
+                next_din=r_din;
                 case (r_state)
                     IDLE:
                         begin
                             if(btn_delayed)
                                 begin
-                                    next_state=START;
+                                  
+                                    next_command=common::COMMAND_READ;
+                                    next_reg=8'h03;
+                                    next_state=START; 
                                 end
+                             else if (btn_write_delayed)
+                                begin
+                                      next_command=common::COMMAND_WRITE;
+                                      next_reg=8'h03;
+                                      next_din=8'h55;
+                                      next_state=START; 
+                                end
+                              
                         end
                     START:
                         begin
-                            next_command=common::COMMAND_READ;
                             next_state=WAIT_FOR_FINISHED;
                         end
                     WAIT_FOR_FINISHED:
                         begin
-                            next_command<=common::COMMAND_IDLE;
+                            next_command=common::COMMAND_IDLE;
                             if(master_finished)
                                 next_state=IDLE;
                                 

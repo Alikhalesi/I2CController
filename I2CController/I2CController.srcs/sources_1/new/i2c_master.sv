@@ -28,7 +28,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
      (* mark_debug = "true" *)  inout tri sda,
  (* mark_debug = "true" *)   output tri scl,
     output logic[7:0] dout,
-    output logic[7:0] din,
+    input logic[7:0] din,
     input common::I2C_COMMAND command,
     output logic ready,
     (* mark_debug = "true" *)  output logic finished,
