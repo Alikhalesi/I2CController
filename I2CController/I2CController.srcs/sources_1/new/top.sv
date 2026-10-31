@@ -53,11 +53,12 @@ debouncer btn_debouncer(.d(btn),.q(btn_debounced),.clk(clk),.nrst(synced_rst));
 debouncer btn_write_debouncer(.d(btn_write),.q(btn_write_debounced),.clk(clk),.nrst(synced_rst));
     
     logic btn_write_delayed;
-     delay_signal btn_write_delay(.clk(clk),.nrst(nrst),.d(btn_write_debouncer),.q(btn_write_delayed));
+     delay_signal btn_write_delay(.clk(clk),.nrst(nrst),.d(btn_write_debounced),.q(btn_write_delayed));
      
      
      common::I2C_COMMAND r_command,next_command;
      logic[7:0] dout;
+     logic[7:0] din;
      logic master_ready;
      logic master_finished;
     logic slave_ack;
@@ -73,7 +74,8 @@ debouncer btn_write_debouncer(.d(btn_write),.q(btn_write_debounced),.clk(clk),.n
     .ready(master_ready),
     .finished(master_finished),
     .slave_ack(slave_ack),
-    .reg_addr(reg_addr)
+    .reg_addr(reg_addr),
+    .din(din)
      );
 
     
