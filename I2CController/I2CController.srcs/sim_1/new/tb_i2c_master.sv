@@ -55,6 +55,7 @@ module tb_i2c_master();
         .scl(scl),
         .slave_ack(slave_ack),
         .dout(dout),
+        .din(din),
         .command(command),
         .ready(ready),
         .finished(finished),

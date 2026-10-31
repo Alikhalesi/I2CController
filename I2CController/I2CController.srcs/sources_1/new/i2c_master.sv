@@ -28,6 +28,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
      (* mark_debug = "true" *)  inout tri sda,
  (* mark_debug = "true" *)   output tri scl,
     output logic[7:0] dout,
+    output logic[7:0] din,
     input common::I2C_COMMAND command,
     output logic ready,
     (* mark_debug = "true" *)  output logic finished,
@@ -71,6 +72,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_restarted<=0;
                 r_master_nack<=0;
                 r_reg_addr<=0;
+                r_din<=0;
             end
          else
             begin
@@ -88,6 +90,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                 r_restarted<=next_restarted;
                 r_master_nack<=next_master_nack;
                 r_reg_addr<=next_reg_addr;
+                r_din<=next_din;
             end
     end
     
@@ -108,6 +111,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
         next_restarted=r_restarted;
         next_master_nack=r_master_nack;
         next_reg_addr=r_reg_addr;
+        next_din=r_din;
         case (r_state)
             IDLE:
                 begin
@@ -124,6 +128,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                             next_restarted=0;
                             next_master_nack=0;
                             next_reg_addr=reg_addr;
+                            next_din=din;
                         end
                 end
             START:
@@ -170,6 +175,10 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                         begin
                                              next_sda=reg_addr[r_bit_count];
                                         end
+                                     else if (r_phase==DATA)
+                                        begin
+                                             next_sda=r_din[r_bit_count];
+                                        end
                                              next_state=D2;
                             next_dvsr=0;
                                 end
@@ -197,10 +206,7 @@ module i2c_master #(localparam int SCL_FREQ=100_000,localparam int DVSR=(100_000
                                     begin
                                            next_dout={r_dout[6:0],sda};
                                     end
-                                 else if (r_command==common::COMMAND_READ)
-                                    begin
-                                        next_sda=r_din[r_bit_count];
-                                    end
+                                
                         
                             end
                      if(r_dvsr==DVSR)
