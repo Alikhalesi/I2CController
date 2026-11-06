@@ -134,14 +134,13 @@ sseg_mux seven_mux(.number( {8'b0,dout} ),
                                 begin
                                   
                                     next_command=common::COMMAND_READ;
-                                    next_reg=8'h03;
+                                    next_reg=8'h00;
                                     next_state=START; 
                                 end
                              else if (btn_write_delayed)
                                 begin
-                                      next_command=common::COMMAND_WRITE;
-                                      next_reg=8'h03;
-                                      next_din=8'h55;
+                                      next_command=common::COMMAND_READ;
+                                      next_reg=8'h01;
                                       next_state=START; 
                                 end
                               
